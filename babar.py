@@ -28,6 +28,7 @@ import os
 import sys
 
 
+
 # TODO: put these globals into a configuration file.
 inputformats = {'text': 'org.apache.hadoop.mapred.TextInputFormat',
                 'auto': 'org.apache.hadoop.streaming.AutoInputFormat'}
@@ -171,7 +172,7 @@ def init(filename=sys.argv[0]):
         sys.exit(0)
 
 
-def run_program(commandline, options):
+def run_program(commandline, options=None):
     """
     Run a program with the given command line and options.
 
@@ -187,20 +188,40 @@ def run_program(commandline, options):
     :ReturnType:
         String.
     """
+    if options == None: options = {}
     child = os.popen(commandline % options)
     return child.read()
 
 
-def dfs_read(files):
+# TODO: factorize with dfs_read()
+def dfs_tail(files, nb_lines=None):
+    if not isinstance(files, list): files = [files]
+    options = {'path':    mapreduce_path,
+               'program': mapreduce_program,
+               'files':   ' '.join(files) }
+    head = ' | tail -n %s' % (nb_lines) if nb_lines else ''
+    commandline = '%(path)s%(program)s dfs -cat %(files)s' + head
+    return run_program(commandline, options)
+
+
+
+def dfs_read(files, first=None, last=None):
     """
-    Read the content of files on the DFS. Multiple files can be specified.
+    Read the content of files on the DFS. Multiple files can be specified,
+    and it is possible to read only n lines at the beginning or at the end
+    of the file. 'first' and 'last' being exclusive parameters, if both of
+    them are used then only 'first' is used.
 
     :Parameters:
         files : string or list of strings
             Files to read from on the DFS.
+        first : int
+            Number of lines to read at the beginning of the file
+        last : int
+            Number of lines to read at the end of the file
 
     :Return:
-        Lines of the file(s) read. 
+        Lines of the file(s) on the DFS.
 
     :ReturnType:
         List of strings.
@@ -209,7 +230,10 @@ def dfs_read(files):
     options = {'path':    mapreduce_path,
                'program': mapreduce_program,
                'files':   ' '.join(files) }
-    commandline = '%(path)s%(program)s dfs -cat %(files)s'
+    if first:   truncate = ' | head -n %s' % (nb_lines) if nb_lines else ''
+    elif last:  truncate = ' | tail -n %s' % (nb_lines) if nb_lines else ''
+    else:       truncate = ''
+    commandline = '%(path)s%(program)s dfs -cat %(files)s' + truncate
     return run_program(commandline, options)
 
 
@@ -261,8 +285,8 @@ def run(mapper,
         reducer,
         inputs,
         output,
-        files=[],
-        parameters={},
+        files=None,
+        parameters=None,
         inputformat='auto',
         outputformat='auto'):
     """
@@ -278,9 +302,9 @@ def run(mapper,
             and 'key' and 'values' will be filled with the data read from the
             mapper task. 'key' is a string and 'values' is a list of strings.
         inputs : string or list of strings
-            Paths to the files for the mapper read from on the DFS file system.
+            Paths to the files for the mapper read from on the DFS.
         output : string
-            Name of the file for the reducer to write on the DFS file system.
+            Name of the file for the reducer to write on the DFS.
         files : list of strings
             Names of the files to be included in the path of the mapper and
             reducer methods. All file used by the program, and imported python
@@ -303,6 +327,8 @@ def run(mapper,
     :ReturnType:
         String
     """
+    if files == None: files = []
+    if parameters == None: parameters = {}
 
     # TODO: Check if all necessary files exist?
     if not isinstance(inputs, list): inputs = [inputs]
@@ -320,8 +346,6 @@ def run(mapper,
     command_mapper   = pattern_command % (filename_program, option_mapper, mapper.__name__, options)
     command_reducer  = pattern_command % (filename_program, option_reducer, reducer.__name__, options)
 
-    files = quote_list(files)
-
     options = {'path':         mapreduce_path,
                'program':      mapreduce_program,
                'streaming':    mapreduce_streaming,
@@ -329,7 +353,7 @@ def run(mapper,
                'output':       ' -output ' + output,
                'mapper':       '-mapper ' + command_mapper,
                'reducer':      '-reducer ' + command_reducer,
-               'files':        ' -file '.join([''] + files),
+               'files':        ' -file '.join([''] + quote_list(files)),
                'inputformat':  '-inputformat \'%s\'' % inputformats[inputformat],
                'outputformat': '-outputformat \'%s\'' % outputformats[outputformat]
               }
@@ -344,7 +368,7 @@ def run(mapper,
     return content
 
 
-def _read_input_reducer(file, separator='\t'):
+def read_input_reducer(file, separator='\t'):
     """
     Prepare the input for the reducer.
 
@@ -362,6 +386,11 @@ def _read_input_reducer(file, separator='\t'):
     """
     for line in file:
         yield line.rstrip().split(separator, 1)
+
+
+def valuesof(items):
+    for k, v in items:
+        yield v
 
 
 def reducer_wrapper(reducer_fct, separator='\t'):
@@ -386,7 +415,8 @@ def reducer_wrapper(reducer_fct, separator='\t'):
     #   key:   key of the current item
     #   items: iterator yielding all ['<key>', '<value>'] items
     for (key, items) in groupby(data, itemgetter(0)):
-        pairs =  reducer_fct(key, [v for k, v in items])
+        #if not key: continue  # in case of invalid key
+        pairs =  reducer_fct(key, valuesof(items))
         if pairs:
             if isinstance(pairs, tuple):
                 # Simple tuple, so we make it a tuple in a list
@@ -434,5 +464,7 @@ def mapper_wrapper(mapper_fct, separator='\t'):
                 # Simple tuple, so we make it a tuple in a list
                 pairs = [pairs]
             for (key_m, value_m) in pairs:
+                # Special case to get sequential keys
+                if key_m == None:   key_m = key
                 print '%s%s%s' % (str(key_m), separator, str(value_m))
                 key += 1

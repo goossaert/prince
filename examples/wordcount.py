@@ -24,26 +24,19 @@ __docformat__ = "restructuredtext en"
 ## You should have received a copy of the GNU General Public License
 ## along with Babar.  If not, see <http://www.gnu.org/licenses/>.
 
-
-
-import os
-import sys
 import babar
 
+
 def wc_mapper(key, value):
-    """Mapper function, where 'key' and 'value' are strings."""
+    """Mapper method with 'key' and 'value' as strings"""
     for word in value.split():
         yield word, 1
 
 
 def wc_reducer(key, values):
-    """Reducer function, where 'key' is a string and 'values' a list of strings."""
-    try:
-        values = [int(v) for v in values]
-        yield key, sum(values)
-    except ValueError:
-        # discard non-numerical values
-        pass
+    """Reducer method with 'key' a string and 'values' a generator of strings"""
+    try:                yield key, sum([int(v) for v in values])
+    except ValueError:  pass # discard non-numerical values
 
 
 if __name__ == "__main__":
@@ -51,11 +44,11 @@ if __name__ == "__main__":
     babar.init()
 
     input  = 'logs/*' # change to input data on the DFS
-    output = 'count'
+    output = 'count0004'
 
     # Run the task with specified mapper and reducer methods
     babar.run(wc_mapper, wc_reducer, input, output, inputformat='text', outputformat='text')
 
     # Read the output file and print it 
-    file = babar.dfs_read(count + '/part*')
+    file = babar.dfs_read(output + '/part*')
     print file
