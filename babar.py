@@ -230,8 +230,8 @@ def dfs_read(files, first=None, last=None):
     options = {'path':    mapreduce_path,
                'program': mapreduce_program,
                'files':   ' '.join(files) }
-    if first:   truncate = ' | head -n %s' % (nb_lines) if nb_lines else ''
-    elif last:  truncate = ' | tail -n %s' % (nb_lines) if nb_lines else ''
+    if first:   truncate = ' | head -n %s' % first
+    elif last:  truncate = ' | tail -n %s' % last
     else:       truncate = ''
     commandline = '%(path)s%(program)s dfs -cat %(files)s' + truncate
     return run_program(commandline, options)
@@ -458,7 +458,7 @@ def mapper_wrapper(mapper_fct, separator='\t'):
     data = read_input_mapper(sys.stdin)
     key = 0
     for line in data:
-        pairs = mapper_fct(str(key), line)
+        pairs = mapper_fct(str(key), line.rstrip())
         if pairs:
             if isinstance(pairs, tuple):
                 # Simple tuple, so we make it a tuple in a list
@@ -466,5 +466,5 @@ def mapper_wrapper(mapper_fct, separator='\t'):
             for (key_m, value_m) in pairs:
                 # Special case to get sequential keys
                 if key_m == None:   key_m = key
-                print '%s%s%s' % (str(key_m), separator, str(value_m))
+                print '%s%s%s' % (str(key_m), separator, str(value_m).rstrip())
                 key += 1
