@@ -11,27 +11,27 @@ __docformat__ = "restructuredtext en"
 
 ## Copyright (c) 2010 Emmanuel Goossaert 
 ##
-## This file is part of Babar, an extra-light Python module to run
+## This file is part of Prince, an extra-light Python module to run
 ## MapReduce tasks in the Hadoop framework. MapReduce is a patented
 ## software framework introduced by Google, and Hadoop is a registered
 ## trademark of the Apache Software Foundation.
 ##
-## Babar is free software; you can redistribute it and/or modify
+## Prince is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
 ## the Free Software Foundation; either version 3 of the License, or
 ## (at your option) any later version.
 ##
-## Babar is distributed in the hope that it will be useful,
+## Prince is distributed in the hope that it will be useful,
 ## but WITHOUT ANY WARRANTY; without even the implied warranty of
 ## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ## GNU General Public License for more details.
 ##
 ## You should have received a copy of the GNU General Public License
-## along with Babar.  If not, see <http://www.gnu.org/licenses/>.
+## along with Prince.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
 import math
-import babar
+import prince
 
 
 def node_info(value):
@@ -51,7 +51,7 @@ def frontier_mapper(key, value):
     if node != None:
         yield node, int(math.fabs(distance)) # reinject itself
         if distance >= 0: # if the value is negative, it is skipped
-            params = babar.get_parameters()
+            params = prince.get_parameters()
             graph = read_graph(params['graph'][0])
             #graph = read_graph('/home/hadoop/small.txt')
             for node_adjacent in graph[node]:
@@ -130,7 +130,7 @@ def display_usage():
  
 
 if __name__ == "__main__":
-    babar.init()
+    prince.init()
 
     if len(sys.argv) != 3:
         display_usage()
@@ -150,9 +150,9 @@ if __name__ == "__main__":
 
     # Create the initial files with the tuple (source, 0)
     frontier_current = frontier % (iteration_start - 1)
-    babar.dfs_write(frontier_current + part, (source_node, 0))
+    prince.dfs_write(frontier_current + part, (source_node, 0))
     filter_current = filter % (iteration_start - 1)
-    babar.dfs_write(filter_current + part, (source_node, 0))
+    prince.dfs_write(filter_current + part, (source_node, 0))
 
     stop = False
     iteration = iteration_start
@@ -165,21 +165,21 @@ if __name__ == "__main__":
         termination_current = termination % iteration
 
         # Compute the frontier from the previous filter
-        babar.run(frontier_mapper, frontier_reducer, filter_previous + suffix, frontier_current,
-                  filename_graph, options, 'text', 'text')
-        print babar.dfs_read(frontier_current + suffix)
+        prince.run(frontier_mapper, frontier_reducer, filter_previous + suffix, frontier_current,
+                   filename_graph, options, 'text', 'text')
+        print prince.dfs_read(frontier_current + suffix)
 
         # Compute the filter from the previous and current frontier
-        babar.run(filter_mapper, filter_reducer, [frontier_previous + suffix, frontier_current + suffix], filter_current,
-                  filename_graph, options, 'text', 'text')
-        print babar.dfs_read(filter_current + suffix)
+        prince.run(filter_mapper, filter_reducer, [frontier_previous + suffix, frontier_current + suffix], filter_current,
+                   filename_graph, options, 'text', 'text')
+        print prince.dfs_read(filter_current + suffix)
 
         # Compute the termination condition from the current filter
-        babar.run(termination_mapper, termination_reducer, filter_current + suffix, termination_current,
-                  filename_graph, options, 'text', 'text')
-        print babar.dfs_read(termination_current + suffix)
+        prince.run(termination_mapper, termination_reducer, filter_current + suffix, termination_current,
+                   filename_graph, options, 'text', 'text')
+        print prince.dfs_read(termination_current + suffix)
 
         # Termination: check if all distances are stable
-        termination_value = babar.dfs_read(termination_current + suffix)
+        termination_value = prince.dfs_read(termination_current + suffix)
         stop = int(termination_value.split()[1])
         iteration += 1

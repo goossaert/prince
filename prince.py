@@ -1,27 +1,27 @@
 """
-Babar distributed computing module.
+Prince distributed computing module.
 """
 __docformat__ = "restructuredtext en"
 
 ## Copyright (c) 2010 Emmanuel Goossaert 
 ##
-## This file is part of Babar, an extra-light Python module to run
+## This file is part of Prince, an extra-light Python module to run
 ## MapReduce tasks in the Hadoop framework. MapReduce is a patented
 ## software framework introduced by Google, and Hadoop is a registered
 ## trademark of the Apache Software Foundation.
 ##
-## Babar is free software; you can redistribute it and/or modify
+## Prince is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
 ## the Free Software Foundation; either version 3 of the License, or
 ## (at your option) any later version.
 ##
-## Babar is distributed in the hope that it will be useful,
+## Prince is distributed in the hope that it will be useful,
 ## but WITHOUT ANY WARRANTY; without even the implied warranty of
 ## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ## GNU General Public License for more details.
 ##
 ## You should have received a copy of the GNU General Public License
-## along with Babar.  If not, see <http://www.gnu.org/licenses/>.
+## along with Prince.  If not, see <http://www.gnu.org/licenses/>.
 
 __all__ = ['init', 'run', 'get_parameters', 'dfs_read']
 import os
@@ -40,8 +40,8 @@ mapreduce_program   = mapreduce_path + 'bin/hadoop'
 
 mapreduce_streaming = 'contrib/streaming/hadoop-0.20.1-streaming.jar'
 
-option_mapper  = 'bmapper'
-option_reducer = 'breducer'
+option_mapper  = 'pmapper'
+option_reducer = 'preducer'
 separator = '\t'
 
 
@@ -238,7 +238,7 @@ def init(program=sys.argv[0], tracefile=None):
 
     :Parameters:
         program : string
-            Name of the program from which Babar is included.
+            Name of the program from which Prince is included.
             Default is sys.argv[0].
         tracefile : string
             Base name of the file on the DFS where to write the traceback in
@@ -494,7 +494,7 @@ def reducer_wrapper(reducer_fct, separator='\t'):
     from itertools import groupby
     from operator import itemgetter
 
-    # As Babar uses Hadoop streaming, input data come from the standard input
+    # As Prince uses Hadoop streaming, input data come from the standard input
     data = read_input_reducer(sys.stdin, separator=separator)
 
     # groupby() groups items by key, and creates an iterator on the items
@@ -540,7 +540,7 @@ def mapper_wrapper(mapper_fct, separator='\t'):
         separator : string
             Character or string used to split the key from the value.
     """
-    # As Babar uses Hadoop streaming, input data come from the standard input
+    # As Prince uses Hadoop streaming, input data come from the standard input
     data = read_input_mapper(sys.stdin)
     key = 0
     for line in data:

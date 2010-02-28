@@ -2,7 +2,7 @@
 """
 Distributed merge sort on integer numbers using MapReduce/Hadoop.
 
-Quite inefficient because of Python, because Babar handles keys and values as
+Quite inefficient because of Python, because Prince handles keys and values as
 strings, and because reducers have to handle increasing number of values as
 the sort goes on. But it is interesting as it shows how to code such a sort
 algorithm using the MapReduce paradigm.
@@ -14,26 +14,26 @@ __docformat__ = "restructuredtext en"
 
 ## Copyright (c) 2010 Emmanuel Goossaert 
 ##
-## This file is part of Babar, an extra-light Python module to run
+## This file is part of Prince, an extra-light Python module to run
 ## MapReduce tasks in the Hadoop framework. MapReduce is a patented
 ## software framework introduced by Google, and Hadoop is a registered
 ## trademark of the Apache Software Foundation.
 ##
-## Babar is free software; you can redistribute it and/or modify
+## Prince is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
 ## the Free Software Foundation; either version 3 of the License, or
 ## (at your option) any later version.
 ##
-## Babar is distributed in the hope that it will be useful,
+## Prince is distributed in the hope that it will be useful,
 ## but WITHOUT ANY WARRANTY; without even the implied warranty of
 ## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ## GNU General Public License for more details.
 ##
 ## You should have received a copy of the GNU General Public License
-## along with Babar.  If not, see <http://www.gnu.org/licenses/>.
+## along with Prince.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
-import babar
+import prince
 
 
 def str_to_int(strings):
@@ -129,18 +129,27 @@ def split_reducer(key, values):
         yield index + 1, number
 
 
-if __name__ == "__main__":
-    # Always call babar.init() at the beginning of the program
-    babar.init()
+def display_usage():
+    print 'usage: ./%s input output' % sys.argv[0]
+    print '  input: input file on the DFS'
+    print '  output: output file on the DFS'
 
-    # File names
-    input   = 'numbers/numbers100000.txt' # change to input data on the DFS
-    output  = 'merge%04d'
-    sorted  = 'merge_sorted'
+
+if __name__ == "__main__":
+    # Always call prince.init() at the beginning of the program
+    prince.init()
+
+    if len(sys.argv) != 3:
+        display_usage()
+        sys.exit(0)
+
+    input  = sys.argv[1]
+    output = sys.argv[2] + '%04d'
+    sorted = sys.argv[2] + '_sorted'
     suffix  = '/part*'
 
     # Create the initial buckets from the data
-    babar.run(init_mapper, init_reducer, input, output % 0, inputformat='text', outputformat='text')
+    prince.run(init_mapper, init_reducer, input, output % 0, inputformat='text', outputformat='text')
 
     stop = False
     iteration = 1
@@ -148,13 +157,13 @@ if __name__ == "__main__":
         # Merge current buckets
         previous = output % (iteration - 1)
         current  = output % iteration
-        babar.run(merge_mapper, merge_reducer, previous + suffix, current, inputformat='text', outputformat='text')
+        prince.run(merge_mapper, merge_reducer, previous + suffix, current, inputformat='text', outputformat='text')
  
         # Check if sort is done
-        state = babar.dfs_read(current + suffix, last=1) 
+        state = prince.dfs_read(current + suffix, last=1) 
         if int(state.split()[0]) == 0:
             stop = True
         iteration += 1
 
     # Organize the sorted numbers, one per tuple
-    babar.run(split_mapper, split_reducer, current + suffix, sorted, inputformat='text', outputformat='text')
+    prince.run(split_mapper, split_reducer, current + suffix, sorted, inputformat='text', outputformat='text')
