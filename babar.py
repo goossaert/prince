@@ -28,20 +28,21 @@ import os
 import sys
 
 
-
-# TODO: put these globals into a configuration file.
+# TODO: put all constants into a configuration file.
 inputformats = {'text': 'org.apache.hadoop.mapred.TextInputFormat',
                 'auto': 'org.apache.hadoop.streaming.AutoInputFormat'}
 
 outputformats = {'text': 'org.apache.hadoop.mapred.TextOutputFormat',
                  'auto': 'org.apache.hadoop.mapred.SequenceFileOutputFormat'}
 
-mapreduce_path      = '/var/hadoop/core/'
-mapreduce_program   = 'bin/hadoop'
+mapreduce_path      = os.environ.get('HADOOP_HOME') + '/'
+mapreduce_program   = mapreduce_path + 'bin/hadoop'
+
 mapreduce_streaming = 'contrib/streaming/hadoop-0.20.1-streaming.jar'
 
 option_mapper  = 'bmapper'
 option_reducer = 'breducer'
+separator = '\t'
 
 
 def get_parameters_all():
@@ -145,7 +146,81 @@ def get_task():
     return None, None
 
 
-def init(filename=sys.argv[0]):
+def get_errorfile(filetrace=None):
+    """
+    Get an available error path on the DFS
+
+    :Parameters:
+        filetrace : string
+            Basename for the trace file
+
+    :Return:
+        Avaible file name where to put the trace
+    
+    :ReturnType:
+        String
+    """
+    errno = 0
+    while True:
+        options = {'mapreduce': mapreduce_program,
+                   'filename':  filetrace,
+                   'errno':     errno}
+        # TODO: very slow, so implement the found test with another technique
+        found = run_program('%(mapreduce)s dfs -ls %(filename)s%(errno)d', options)
+        if not found:
+            return '%(filename)s%(errno)d' % options
+        errno += 1
+
+
+def dfs_write(filename, content):
+    """
+    Write text to a file on the DFS
+
+    :Parameters:
+        filename : string
+            File name where to write the text on the DFS
+        content : string or list of two-item tuples
+            If it is a string, the text is just written as it is.
+            If it is a list of tuples, each tuple is written as a MapReduce
+            entry (key, value), separated by the default separator.
+    """
+    options = {'text':      text,
+               'mapreduce': mapreduce_program,
+               'filename':  filename }
+    if not isinstance(content, str):
+        content = ['%s%s%s' % (str(item[0]), '\t', str(item[1])) for item in content]
+    run_program('echo "%(text)s" | %(mapreduce)s dfs -put - %(filename)s', options)
+
+
+
+def handle_exception(filetrace):
+    """
+    Write the last traceback to the given file on the DFS.
+
+    :Parameters:
+        filetrace : string
+            Name of the file where to save the traceback on the DFS
+    """
+    import traceback
+    type, value, trace = sys.exc_info()
+    message = traceback.format_exception(type, value, trace)
+    errorfile = get_errorfile(filetrace)
+    options = {'mapreduce': mapreduce_program,
+               'message':   ''.join(message),
+               'errorfile': errorfile}
+    run_program('echo "%(message)s" | %(mapreduce)s dfs -put - %(errorfile)s', options)
+
+
+def get_tracefile():
+    """Get tracefile name from parameters passed to mappers and reducers"""
+    option = 'tracefile'
+    params = get_parameters()
+    if option in params:
+        return params[option][0]
+    return None
+
+
+def init(program=sys.argv[0], tracefile=None):
     """
     Initializer function, that *have* to be called as early as possible in the
     '__main__' section of the calling program. It ensures that all accesses to
@@ -154,21 +229,32 @@ def init(filename=sys.argv[0]):
     into these details don't get confused with fancy method names
 
     :Parameters:
-        filename : string
-            Name of the file from which Babar is included.
+        program : string
+            Name of the program from which Babar is included.
             Default is sys.argv[0].
+        tracefile : string
+            Base name of the file on the DFS where to write the traceback in
+            case an exception is caught in a mapper/reducer when debugging.
+            By default it is desactivated.
     """
-    global filename_caller
-    filename_caller = filename
+    global filename_caller, filename_trace
+    filename_caller = program
+    filename_trace  = tracefile
 
     tasktype, taskname = get_task()
     if not tasktype: return
-    
+
     method = find_method(filename, taskname)
     if method:
         tasks = {option_mapper:  mapper_wrapper,
                  option_reducer: reducer_wrapper }
-        tasks[tasktype](method)
+        try:
+            tasks[tasktype](method)
+        except:
+            tracefile = get_tracefile()
+            if tracefile:
+                handle_exception(tracefile)
+            raise # re-raise the exception so that the task fail
         sys.exit(0)
 
 
@@ -189,20 +275,9 @@ def run_program(commandline, options=None):
         String.
     """
     if options == None: options = {}
+    #print 'command:', commandline % options
     child = os.popen(commandline % options)
     return child.read()
-
-
-# TODO: factorize with dfs_read()
-def dfs_tail(files, nb_lines=None):
-    if not isinstance(files, list): files = [files]
-    options = {'path':    mapreduce_path,
-               'program': mapreduce_program,
-               'files':   ' '.join(files) }
-    head = ' | tail -n %s' % (nb_lines) if nb_lines else ''
-    commandline = '%(path)s%(program)s dfs -cat %(files)s' + head
-    return run_program(commandline, options)
-
 
 
 def dfs_read(files, first=None, last=None):
@@ -227,13 +302,12 @@ def dfs_read(files, first=None, last=None):
         List of strings.
     """
     if not isinstance(files, list): files = [files]
-    options = {'path':    mapreduce_path,
-               'program': mapreduce_program,
-               'files':   ' '.join(files) }
+    options = {'mapreduce': mapreduce_program,
+               'files':     ' '.join(files) }
     if first:   truncate = ' | head -n %s' % first
     elif last:  truncate = ' | tail -n %s' % last
     else:       truncate = ''
-    commandline = '%(path)s%(program)s dfs -cat %(files)s' + truncate
+    commandline = '%(mapreduce)s dfs -cat %(files)s' + truncate
     return run_program(commandline, options)
 
 
@@ -330,6 +404,10 @@ def run(mapper,
     if files == None: files = []
     if parameters == None: parameters = {}
 
+    global filename_trace
+    if filename_trace:
+        parameters['tracefile'] = filename_trace
+
     # TODO: Check if all necessary files exist?
     if not isinstance(inputs, list): inputs = [inputs]
     if not isinstance(files, list): files= [files]
@@ -347,7 +425,7 @@ def run(mapper,
     command_reducer  = pattern_command % (filename_program, option_reducer, reducer.__name__, options)
 
     options = {'path':         mapreduce_path,
-               'program':      mapreduce_program,
+               'mapreduce':    mapreduce_program,
                'streaming':    mapreduce_streaming,
                'inputs':       ' -input '.join([''] + inputs),
                'output':       ' -output ' + output,
@@ -358,11 +436,11 @@ def run(mapper,
                'outputformat': '-outputformat \'%s\'' % outputformats[outputformat]
               }
 
-    commandline = '%(path)s%(program)s jar %(path)s%(streaming)s %(inputs)s %(output)s %(mapper)s %(reducer)s %(files)s %(inputformat)s %(outputformat)s'
+    commandline = '%(mapreduce)s jar %(path)s%(streaming)s %(inputs)s %(output)s %(mapper)s %(reducer)s %(files)s %(inputformat)s %(outputformat)s'
 
     # TODO: Put this in a logger
     print 'EXECUTE:'
-    print commandline % options 
+    print commandline % options
 
     content = run_program(commandline, options)
     return content
@@ -422,7 +500,7 @@ def reducer_wrapper(reducer_fct, separator='\t'):
                 # Simple tuple, so we make it a tuple in a list
                 pairs = [pairs]
             for (key_r, value_r) in pairs:
-                print "%s%s%s" % (str(key_r), separator, str(value_r))
+                print "%s%s%s" % (str(key_r), separator, str(value_r).rstrip())
 
 
 def read_input_mapper(file):
