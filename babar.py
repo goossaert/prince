@@ -183,13 +183,21 @@ def dfs_write(filename, content):
             If it is a string, the text is just written as it is.
             If it is a list of tuples, each tuple is written as a MapReduce
             entry (key, value), separated by the default separator.
+
+    :Examples:
+        dfs_write('foo', 'String of text')
+        dfs_write('foo', (0, 0))
+        dfs_write('foo', [(0, 1), (1, 1)])
     """
-    options = {'text':      text,
+    #print 'content', content
+    if not isinstance(content, str):
+        if not isinstance(content, list):
+            content = [content]
+        content = ''.join(['%s%s%s' % (str(item[0]), '\t', str(item[1])) for item in content])
+    options = {'content':   content,
                'mapreduce': mapreduce_program,
                'filename':  filename }
-    if not isinstance(content, str):
-        content = ['%s%s%s' % (str(item[0]), '\t', str(item[1])) for item in content]
-    run_program('echo "%(text)s" | %(mapreduce)s dfs -put - %(filename)s', options)
+    run_program('echo "%(content)s" | %(mapreduce)s dfs -put - %(filename)s', options)
 
 
 
@@ -244,7 +252,7 @@ def init(program=sys.argv[0], tracefile=None):
     tasktype, taskname = get_task()
     if not tasktype: return
 
-    method = find_method(filename, taskname)
+    method = find_method(filename_caller, taskname)
     if method:
         tasks = {option_mapper:  mapper_wrapper,
                  option_reducer: reducer_wrapper }
