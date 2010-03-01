@@ -30,73 +30,53 @@ __docformat__ = "restructuredtext en"
 ## along with Prince.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
-import math
 import prince
 
 
 def node_info(value):
     """Get the information about a node from a mapper value"""
     try:
-        (node, distance) = value.split()
+        (node, d_previous, d_current) = value.split()
         node = int(node)
-        distance = int(distance)
-        return (node, distance)
+        d_previous = int(d_previous)
+        d_current = int(d_current)
+        return (node, d_previous, d_current)
     except ValueError:
-        return (None, None)
+        return (None, None, None)
 
 
 def frontier_mapper(key, value):
     """Expand the frontier of one hop."""
-    (node, distance) = node_info(value)
+    (node, d_previous, d_current) = node_info(value)
     if node != None:
-        yield node, int(math.fabs(distance)) # reinject itself
-        if distance >= 0: # if the value is negative, it is skipped
+        yield node, '%d %d' % (d_current, d_current) # reinject itself
+        if d_current != d_previous: # expand only if distance has changed
             params = prince.get_parameters()
             graph = read_graph(params['graph'][0])
             for node_adjacent in graph[node]:
-                yield node_adjacent, distance + 1
+                yield node_adjacent, '%d %d' % (sys.maxint, d_current + 1)
 
 
 def frontier_reducer(node, values):
     """Keep the minimum to follow Dijsktra's algorithm"""
-    try:                yield node, min([int(v) for v in values])
-    except ValueError:  pass
-
-
-def filter_mapper(key, value):
-    """Identity mapper"""
-    (node, distance) = node_info(value)
-    if node != None:
-        yield node, distance
-
-
-def filter_reducer(node, values):
-    """
-    For each node, get minimum distance between current and previous frontiers.
-    Return negative distances for distances that have not been updated.
-    """
     try:
-        distances = [int(d) for d in values] 
+        distances = [v for v in values]
+        d_previous = min([int(d.split()[0]) for d in distances])
+        d_current  = min([int(d.split()[1]) for d in distances])
+        yield node, '%d %d' % (d_previous, d_current)
     except ValueError:
-        return
-    if len(distances) == 1: 
-        yield node, distances[0]
-    else: # len == 2
-        if distances[0] == distances[1]:
-            yield node, -distances[0]
-        else:
-            yield node, min(distances)
+        pass
 
 
-def termination_mapper(key, value):
+def term_mapper(key, value):
     """Check if an update has been made in the current iteration"""
-    (node, distance) = node_info(value)
+    (node, d_previous, d_current) = node_info(value)
     if node != None:
-        changed = 0 if distance <= 0 else 1
+        changed = 0 if d_previous == d_current else 1
         yield 0, changed # important: must reduce to the same key
 
 
-def termination_reducer(key, changed):
+def term_reducer(key, changed):
     """Check whether any of the distances have changed"""
     try:
         if any(int(c) for c in changed):
@@ -120,10 +100,11 @@ def read_graph(filename):
 
 
 def display_usage():
-    print 'usage: ./%s graph source_node [iteration_max] [iteration_start]' % sys.argv[0]
+    print 'usage: ./%s graph source_node output [iteration_max] [iteration_start]' % sys.argv[0]
     print '  graph: graph file on local hard drive: each line begin with the id of a node, and it'
     print '         is continued by its adjacenty list, ie: the ids of the nodes it points to'
     print '  source_node: id of the source node'
+    print '  output: basename of the output files on the DFS'
     print '  iteration_max: maximum number of iterations (default=infinite)'
     print '  iteration_start: iteration to start from, useful to restart a stopped task (default=0)'
  
@@ -131,54 +112,45 @@ def display_usage():
 if __name__ == "__main__":
     prince.init()
 
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 4:
         display_usage()
         sys.exit(0)
 
     filename_graph  = sys.argv[1]
     source_node     = sys.argv[2]
-    iteration_max   = int(sys.argv[3]) if len(sys.argv) == 4 else sys.maxint
-    iteration_start = int(sys.argv[4]) if len(sys.argv) == 5 else 1
+    output          = sys.argv[3]
+    iteration_max   = int(sys.argv[4]) if len(sys.argv) == 5 else sys.maxint
+    iteration_start = int(sys.argv[5]) if len(sys.argv) == 6 else 1
 
-    frontier    = 'frontier%04d'
-    filter      = 'filter%04d'
-    termination = 'termination%04d'
-    suffix      = '/part*'
-    part        = '/part-00000'
-    options     = {'graph': filename_graph, 'source': source_node}
+    frontier = output + '_frontier%04d'
+    term     = output + '_term%04d'
+    suffix   = '/part*'
+    part     = '/part-00000'
+    options  = {'graph': filename_graph, 'source': source_node}
 
-    # Create the initial files with the tuple (source, 0)
+    # Create the initial frontier with the tuple (source, 0)
     frontier_current = frontier % (iteration_start - 1)
-    prince.dfs_write(frontier_current + part, (source_node, 0))
-    filter_current = filter % (iteration_start - 1)
-    prince.dfs_write(filter_current + part, (source_node, 0))
+    prince.dfs_write(frontier_current + part, (source_node, '%d %d' % (sys.maxint, 0)))
 
     stop = False
     iteration = iteration_start
     while not stop and iteration < iteration_max:
         # Update file names
-        frontier_previous   = frontier_current
-        frontier_current    = frontier % iteration
-        filter_previous     = filter_current
-        filter_current      = filter % iteration
-        termination_current = termination % iteration
+        frontier_previous = frontier_current
+        frontier_current  = frontier % iteration
+        term_current      = term % iteration
 
-        # Compute the frontier from the previous filter
-        prince.run(frontier_mapper, frontier_reducer, filter_previous + suffix, frontier_current,
+        # Compute the new frontier
+        prince.run(frontier_mapper, frontier_reducer, frontier_previous + suffix, frontier_current,
                    filename_graph, options, 'text', 'text')
         print prince.dfs_read(frontier_current + suffix)
 
-        # Compute the filter from the previous and current frontier
-        prince.run(filter_mapper, filter_reducer, [frontier_previous + suffix, frontier_current + suffix], filter_current,
-                   filename_graph, options, 'text', 'text')
-        print prince.dfs_read(filter_current + suffix)
-
-        # Compute the termination condition from the current filter
-        prince.run(termination_mapper, termination_reducer, filter_current + suffix, termination_current,
-                   filename_graph, options, 'text', 'text')
-        print prince.dfs_read(termination_current + suffix)
-
         # Termination: check if all distances are stable
-        termination_value = prince.dfs_read(termination_current + suffix)
-        stop = int(termination_value.split()[1])
+        prince.run(term_mapper, term_reducer, frontier_current + suffix, term_current,
+                   filename_graph, options, 'text', 'text')
+        print prince.dfs_read(term_current + suffix)
+        term_value = prince.dfs_read(term_current + suffix)
+        stop = int(term_value.split()[1])
+
+        # Get ready for the next iteration
         iteration += 1
