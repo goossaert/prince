@@ -61,7 +61,11 @@ def get_parameters_all():
     is_value = False
     for index, value in enumerate(sys.argv):
         if value.startswith('--'):
-            params[value[2:]] = params.get(value[2:], []) + [sys.argv[index + 1]]
+            if (index + 1) < len(sys.argv) and not sys.argv[index + 1].startswith('-'):
+                content = sys.argv[index + 1]
+            else:
+                content = None
+            params[value[2:]] = params.get(value[2:], []) + [content]
             is_value = True
         elif is_value:
             is_value = False
@@ -345,7 +349,7 @@ def dfs_write(filename, content):
     if not isinstance(content, str):
         if not isinstance(content, list):
             content = [content]
-        content = ''.join(['%s%s%s' % (str(item[0]), '\t', str(item[1])) for item in content])
+        content = '\n'.join(['%s%s%s' % (str(item[0]), '\t', str(item[1])) for item in content])
     options = {'content':   content,
                'mapreduce': mapreduce_program,
                'filename':  filename }

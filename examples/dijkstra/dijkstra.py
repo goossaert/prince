@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Distributed ingle-source shortest path with Dijsktra's algorithm.
+Distributed single-source shortest path with Dijsktra's algorithm.
 
 Explore a graph considering all weights are one, and find all shortest
 distances from a given source node. Each iteration requires three
@@ -69,7 +69,7 @@ def frontier_reducer(node, values):
 
 
 def term_mapper(key, value):
-    """Check if an update has been made in the current iteration"""
+    """Check if an update has been made during the current iteration"""
     (node, d_previous, d_current) = node_info(value)
     if node != None:
         changed = 0 if d_previous == d_current else 1
@@ -112,15 +112,15 @@ def display_usage():
 if __name__ == "__main__":
     prince.init()
 
-    if len(sys.argv) != 4:
+    if len(sys.argv) < 4:
         display_usage()
         sys.exit(0)
 
     filename_graph  = sys.argv[1]
     source_node     = sys.argv[2]
     output          = sys.argv[3]
-    iteration_max   = int(sys.argv[4]) if len(sys.argv) == 5 else sys.maxint
-    iteration_start = int(sys.argv[5]) if len(sys.argv) == 6 else 1
+    iteration_max   = int(sys.argv[4]) if len(sys.argv) >= 5 else sys.maxint
+    iteration_start = int(sys.argv[5]) if len(sys.argv) >= 6 else 1
 
     frontier = output + '_frontier%04d'
     term     = output + '_term%04d'
@@ -129,8 +129,9 @@ if __name__ == "__main__":
     options  = {'graph': filename_graph, 'source': source_node}
 
     # Create the initial frontier with the tuple (source, 0)
-    frontier_current = frontier % (iteration_start - 1)
-    prince.dfs_write(frontier_current + part, (source_node, '%d %d' % (sys.maxint, 0)))
+    if iteration_start > 1:
+        frontier_current = frontier % (iteration_start - 1)
+        prince.dfs_write(frontier_current + part, (source_node, '%d %d' % (sys.maxint, 0)))
 
     stop = False
     iteration = iteration_start
