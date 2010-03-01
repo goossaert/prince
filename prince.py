@@ -58,9 +58,13 @@ def get_parameters_all():
         Dictionary of list of strings.
     """
     params = {}
-    for index, value in enumerate(sys.argv[1:]):
-        if index % 2 == 0:
-            params[value[2:]] = params.get(value[2:], []) + [sys.argv[index + 2]]
+    is_value = False
+    for index, value in enumerate(sys.argv):
+        if value.startswith('--'):
+            params[value[2:]] = params.get(value[2:], []) + [sys.argv[index + 1]]
+            is_value = True
+        elif is_value:
+            is_value = False
     return params
 
 
@@ -210,30 +214,47 @@ def handle_exception(tracefile):
 
 def get_tracefile():
     """Get trace file name from parameters passed to mappers and reducers"""
-    option = 'tracefile'
+    option = 'trace'
     params = get_parameters()
     if option in params:
+        cleanup_parameters(option)
         return params[option][0]
     return None
 
 
-def init(tracefile=None):
+def cleanup_parameters(names):
+    """
+    Cleanup sys.argv from certain parameters to that program behavior remain
+    the same when testing len(sys.argv) even though some parameters have been
+    added.
+
+    :Parameters:
+        names : string or list of strings
+            Names of the parameters to take off of sys.argv
+    """
+    names = names if isinstance(names, list) else [names]
+    indices = []
+    is_value = False
+    for index, value in enumerate(sys.argv):
+        if value.startswith('--') and value[2:] in names or is_value:
+            is_value = not is_value
+            indices.append(index)
+
+    for index in reversed(indices):
+        del sys.argv[index]
+
+
+def init():
     """
     Initializer function, that *have* to be called as early as possible in the
     '__main__' section of the calling program. It ensures that all accesses to
     mapper and reducer functions are intercepted.
     NOTE: The function is called 'init' so that people who don't want to get
     into these details won't get confused with fancy method names.
-
-    :Parameters:
-       tracefile : string
-            Base name of the file on the DFS where to write the traceback in
-            case an exception is caught in a mapper/reducer when debugging.
-            By default it is desactivated.
     """
     global filename_caller, filename_trace
     filename_caller = sys.argv[0]
-    filename_trace  = tracefile
+    filename_trace  = get_tracefile()
 
     tasktype, taskname = get_task()
     if not tasktype: return
@@ -245,9 +266,8 @@ def init(tracefile=None):
         try:
             tasks[tasktype](method)
         except:
-            tracefile = get_tracefile()
-            if tracefile:
-                handle_exception(tracefile)
+            if filename_trace:
+                handle_exception(filename_trace)
             raise # re-raise the exception so that the task fail
         sys.exit(0)
 
@@ -427,7 +447,7 @@ def run(mapper,
 
     global filename_trace
     if filename_trace:
-        parameters['tracefile'] = filename_trace
+        parameters['trace'] = filename_trace
 
     # TODO: Check if all necessary files exist?
     if not isinstance(inputs, list): inputs = [inputs]
