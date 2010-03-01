@@ -129,8 +129,8 @@ if __name__ == "__main__":
     options  = {'graph': filename_graph, 'source': source_node}
 
     # Create the initial frontier with the tuple (source, 0)
-    if iteration_start > 1:
-        frontier_current = frontier % (iteration_start - 1)
+    frontier_current = frontier % (iteration_start - 1)
+    if iteration_start == 1:
         prince.dfs_write(frontier_current + part, (source_node, '%d %d' % (sys.maxint, 0)))
 
     stop = False

@@ -157,8 +157,8 @@ if __name__ == "__main__":
     options  = {'damping': damping, 'precision': precision}
 
     # Create the initial values
-    if iteration_start > 1:
-        pagerank_current = pagerank % (iteration_start - 1)
+    pagerank_current = pagerank % (iteration_start - 1)
+    if iteration_start == 1:
         pagerank_values  = [p for p in initial_pagerank(filename_graph, pr_init)]
         prince.dfs_write(pagerank_current + part, pagerank_values)
 
