@@ -6,9 +6,9 @@ Quite inefficient because of Python, because Prince handles keys and values as
 strings, and because reducers have to handle increasing number of values as
 the sort goes on. But it is interesting as it shows how to code such a sort
 algorithm using the MapReduce paradigm.
-O(n lg n) iterations are necessary as for any merge sort. Two additional
-iterations are used, one to detect termination, and another one to write
-the result file.
+The overall complexity is O(n lg n) as for any merge sort. On top of the sort
+itself, two additional map/reduce iterations are necessary: one to detect
+termination, and another one to format the results.
 """
 __docformat__ = "restructuredtext en"
 
@@ -122,7 +122,7 @@ def split_mapper(key, value):
 
 
 def split_reducer(key, values):
-    """Return the numbers sorted with one number per tuple"""
+    """Format the sorted numbers with only one number per tuple"""
     buckets = [v for v in values]
     numbers = str_to_int(buckets[0].split())
     for index, number in enumerate(numbers):

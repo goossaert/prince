@@ -23,7 +23,7 @@ __docformat__ = "restructuredtext en"
 ## You should have received a copy of the GNU General Public License
 ## along with Prince.  If not, see <http://www.gnu.org/licenses/>.
 
-__all__ = ['init', 'run', 'get_parameters', 'dfs_read']
+__all__ = ['init', 'run', 'get_parameters', 'dfs_read', 'dfs_write', 'dfs_exists']
 import os
 import sys
 
@@ -146,81 +146,70 @@ def get_task():
     return None, None
 
 
-def get_errorfile(filetrace=None):
+def dfs_exists(path):
     """
-    Get an available error path on the DFS
+    Test if a path exists on the DFS.
+    NOTE: The current implementation is based on 'dfs -ls' and is therefore
+          *very* slow. This is due to the fact that the implementation of
+          'dfs -test -e' in the current Hadoop version (0.20.1) is buggy
+          and cannot be used properly.
 
     :Parameters:
-        filetrace : string
+        path : string
+            File name for the file of which the existence on the DFS
+            has to be tested.
+
+    :Return: 
+        True if the file exists, False otherwise
+
+    :ReturnType:
+        Boolean
+    """
+    options = {'mapreduce': mapreduce_program,
+               'path':      path}
+    found = run_program('%(mapreduce)s dfs -ls %(path)s', options)
+    return True if found else False
+
+
+def get_errorfile(tracefile=None):
+    """
+    Get an available error path on the DFS.
+
+    :Parameters:
+        tracefile : string
             Basename for the trace file
 
     :Return:
-        Avaible file name where to put the trace
+        Available file name where to put the trace
     
     :ReturnType:
         String
     """
     errno = 0
     while True:
-        options = {'mapreduce': mapreduce_program,
-                   'filename':  filetrace,
-                   'errno':     errno}
-        # TODO: very slow, so implement the found test with another technique
-        found = run_program('%(mapreduce)s dfs -ls %(filename)s%(errno)d', options)
-        if not found:
-            return '%(filename)s%(errno)d' % options
+        filepath = '%s%d' % (tracefile, errno)
+        if not dfs_exists(filepath):
+            return filepath
         errno += 1
 
 
-def dfs_write(filename, content):
-    """
-    Write text to a file on the DFS
-
-    :Parameters:
-        filename : string
-            File name where to write the text on the DFS
-        content : string or list of two-item tuples
-            If it is a string, the text is just written as it is.
-            If it is a list of tuples, each tuple is written as a MapReduce
-            entry (key, value), separated by the default separator.
-
-    :Examples:
-        dfs_write('foo', 'String of text')
-        dfs_write('foo', (0, 0))
-        dfs_write('foo', [(0, 1), (1, 1)])
-    """
-    #print 'content', content
-    if not isinstance(content, str):
-        if not isinstance(content, list):
-            content = [content]
-        content = ''.join(['%s%s%s' % (str(item[0]), '\t', str(item[1])) for item in content])
-    options = {'content':   content,
-               'mapreduce': mapreduce_program,
-               'filename':  filename }
-    run_program('echo "%(content)s" | %(mapreduce)s dfs -put - %(filename)s', options)
-
-
-
-def handle_exception(filetrace):
+def handle_exception(tracefile):
     """
     Write the last traceback to the given file on the DFS.
 
     :Parameters:
-        filetrace : string
+        tracefile : string
             Name of the file where to save the traceback on the DFS
     """
     import traceback
     type, value, trace = sys.exc_info()
     message = traceback.format_exception(type, value, trace)
-    errorfile = get_errorfile(filetrace)
-    options = {'mapreduce': mapreduce_program,
-               'message':   ''.join(message),
-               'errorfile': errorfile}
-    run_program('echo "%(message)s" | %(mapreduce)s dfs -put - %(errorfile)s', options)
+    errorfile = get_errorfile(tracefile)
+    dfs_write(errorfile, ''.join(message))
 
 
 def get_tracefile():
-    """Get tracefile name from parameters passed to mappers and reducers"""
+    """Get trace file name from parameters passed to mappers and reducers"""
     option = 'tracefile'
     params = get_parameters()
     if option in params:
@@ -228,25 +217,22 @@ def get_tracefile():
     return None
 
 
-def init(program=sys.argv[0], tracefile=None):
+def init(tracefile=None):
     """
     Initializer function, that *have* to be called as early as possible in the
     '__main__' section of the calling program. It ensures that all accesses to
     mapper and reducer functions are intercepted.
     NOTE: The function is called 'init' so that people who don't want to get
-    into these details don't get confused with fancy method names
+    into these details won't get confused with fancy method names.
 
     :Parameters:
-        program : string
-            Name of the program from which Prince is included.
-            Default is sys.argv[0].
-        tracefile : string
+       tracefile : string
             Base name of the file on the DFS where to write the traceback in
             case an exception is caught in a mapper/reducer when debugging.
             By default it is desactivated.
     """
     global filename_caller, filename_trace
-    filename_caller = program
+    filename_caller = sys.argv[0]
     filename_trace  = tracefile
 
     tasktype, taskname = get_task()
@@ -317,6 +303,33 @@ def dfs_read(files, first=None, last=None):
     else:       truncate = ''
     commandline = '%(mapreduce)s dfs -cat %(files)s' + truncate
     return run_program(commandline, options)
+
+
+def dfs_write(filename, content):
+    """
+    Write text to a file on the DFS
+
+    :Parameters:
+        filename : string
+            File name where to write the text on the DFS
+        content : string or list of two-item tuples
+            If it is a string, the text is just written as it is.
+            If it is a list of tuples, each tuple is written as a MapReduce
+            entry (key, value), separated by the default separator.
+
+    :Examples:
+        dfs_write('foo', 'String of text')
+        dfs_write('foo', (0, 0))
+        dfs_write('foo', [(0, 1), (1, 1)])
+    """
+    if not isinstance(content, str):
+        if not isinstance(content, list):
+            content = [content]
+        content = ''.join(['%s%s%s' % (str(item[0]), '\t', str(item[1])) for item in content])
+    options = {'content':   content,
+               'mapreduce': mapreduce_program,
+               'filename':  filename }
+    run_program('echo "%(content)s" | %(mapreduce)s dfs -put - %(filename)s', options)
 
 
 def quote_list(content, quote_mark='\''):

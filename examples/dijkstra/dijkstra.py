@@ -53,7 +53,6 @@ def frontier_mapper(key, value):
         if distance >= 0: # if the value is negative, it is skipped
             params = prince.get_parameters()
             graph = read_graph(params['graph'][0])
-            #graph = read_graph('/home/hadoop/small.txt')
             for node_adjacent in graph[node]:
                 yield node_adjacent, distance + 1
 
@@ -109,9 +108,9 @@ def termination_reducer(key, changed):
 
 def read_graph(filename):
     """Create a file with only the starting node of the graph."""
-    file = open(filename, 'r')
-    adlists = [line.split(None, 1) for line in file]
-    file.close()
+    with open(filename, 'r') as file:
+        # Existence of the file voluntarily not tested to help debugging
+        adlists = [line.split(None, 1) for line in file]
     graph = {}
     for adlist in adlists:
         node_source = int(adlist[0])
