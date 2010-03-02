@@ -2,15 +2,14 @@
 """
 Distributed PageRank algorithm.
 
-Compute PageRank values for a set of nodes in a graph. The algorithm uses
-a uniform probability distribution to set the initial values: each value is
+Compute the PageRank values for the nodes of a graph. The algorithm uses a
+uniform probability distribution to set the initial values: each value is
 equal to 1 / N, where N is the number of nodes in the whole graph.
-Dandlings nodes (ie: nodes that do not have any out-links to any page, and
-therefore have an empty adjacenty list) are connected to the whole graph in
-order to take advantage of their PageRank values.
-The computation of the PageRank values is stopped when change in values
-between two iterations drops under a threshold. Error is calculated using
-the quadratic norm.
+Dandlings nodes (ie: nodes that do not have any out-links, and therefore
+have an empty adjacency list) are connected to the whole graph in order to
+take advantage of their PageRank values.
+The computation of the PageRank values is stopped when the error in quadratic
+norm converges under a chosen threshold.
 """
 __docformat__ = "restructuredtext en"
 
@@ -67,15 +66,14 @@ def pagerank_reducer(node, values):
     try:
         # sort because we want the 'infos' value at the end of the list
         values = sorted([v for v in values]) # as values is a generator
-        params = prince.get_parameters()
-        damping = float(params['damping'][0])
+        damping = float(prince.get_parameters('damping'))
         infos = values[-1].split()
 
         pr_previous = float(infos[2])
         nodes_adjacent = [int(n) for n in infos[3:]]
         pageranks = [float(v) for v in values[:-1]]
 
-        nb_nodes = float(params['nbnodes'][0])
+        nb_nodes = float(prince.get_parameters('nb_nodes'))
         pr_new = (1.0 - damping) / nb_nodes + damping * sum(pageranks)
         yield (node, make_value(pr_previous, pr_new, nodes_adjacent))
     except ValueError:
@@ -90,10 +88,9 @@ def term_mapper(key, value):
 
 
 def term_reducer(key, pagerank_changes):
-    """Check whether the values are precise enough using the quadratic norm"""
+    """Check whether the values are converging using the quadratic norm"""
     try:
-        params = prince.get_parameters()
-        precision = float(params['precision'][0])
+        precision = float(prince.get_parameters('precision'))
         if sum([float(p) ** 2 for p in pagerank_changes]) > precision ** 2:
             return 0, 0 # let's do another iteration
     except ValueError:
@@ -102,7 +99,7 @@ def term_reducer(key, pagerank_changes):
 
 
 def read_graph(filename):
-    """Create a file with only the starting node of the graph."""
+    """Create a file with only the starting node of the graph"""
     with open(filename, 'r') as file:
         # Existence of the file voluntarily not tested to help debugging
         adlists = [line.split(None, 1) for line in file]
@@ -169,7 +166,7 @@ if __name__ == "__main__":
     term     = output + '_term%04d'
     suffix   = '/part*'
     part     = '/part-00000'
-    options  = {'damping': damping, 'precision': precision, 'nbnodes': len(graph)}
+    options  = {'damping': damping, 'precision': precision, 'nb_nodes': len(graph)}
 
     # Create the initial values
     pagerank_current = pagerank % iteration_start

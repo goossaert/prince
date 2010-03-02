@@ -51,8 +51,7 @@ def frontier_mapper(key, value):
     if node != None:
         yield node, '%d %d' % (d_current, d_current) # reinject itself
         if d_current != d_previous: # expand only if distance has changed
-            params = prince.get_parameters()
-            graph = read_graph(params['graph'][0])
+            graph = read_graph(prince.get_parameters('graph'))
             for node_adjacent in graph[node]:
                 yield node_adjacent, '%d %d' % (sys.maxint, d_current + 1)
 

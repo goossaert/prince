@@ -65,31 +65,50 @@ def get_parameters_all():
                 content = sys.argv[index + 1]
             else:
                 content = None
-            params[value[2:]] = params.get(value[2:], []) + [content]
+            params[value[2:]] = content
             is_value = True
         elif is_value:
             is_value = False
     return params
 
 
-def get_parameters():
+params = {} # global to mimic static variable behavior
+def get_parameters(*args):
     """
     Return the parameters passed to the mapper and reducer tasks through
     the run() method. When used, it has to be called in the mapper and
     reducer methods.
 
+    :Parameters:
+        *args : strings 
+            List of the parameters to search for. See the Examples section.
+
     :Return:
-        Each entry is a list of strings, each string being one of the values
-        for a parameter.
+        The value of the parameters of which the names have been given
+        in parameter.
 
     :ReturnType:
-        Dictionary of list of strings.
+        String or tuple of strings
+
+    :Examples:
+        param1_value = get_parameters('param1')
+        (param1_value, param2_value) = get_parameters('param1', 'param2')
     """
-    params = get_parameters_all()
-    for name in [option_mapper, option_reducer]:
-        if name in params:
-            del params[name]
-    return params
+    global params
+    if not params:
+        params = get_parameters_all()
+        for name in [option_mapper, option_reducer]:
+            if name in params:
+                del params[name]
+ 
+    ret = []
+    for arg in args:
+        if arg in params:
+            ret.append(params[arg])
+        else:
+            ret.append(None)
+
+    return ret[0] if len(ret) == 1 else tuple(ret)
 
 
 def inspect_methods(filename):
@@ -150,7 +169,7 @@ def get_task():
     params = get_parameters_all()
     for task in [option_mapper, option_reducer]:
         if task in params:
-            return task, params[task][0]
+            return task, params[task]
     return None, None
 
 
@@ -164,11 +183,10 @@ def dfs_exists(path):
 
     :Parameters:
         path : string
-            File name for the file of which the existence on the DFS
-            has to be tested.
+            Path of which the existence on the DFS has to be tested.
 
     :Return: 
-        True if the file exists, False otherwise
+        True if the path exists, False otherwise
 
     :ReturnType:
         Boolean
@@ -216,16 +234,6 @@ def handle_exception(tracefile):
     dfs_write(errorfile, ''.join(message))
 
 
-def get_tracefile():
-    """Get trace file name from parameters passed to mappers and reducers"""
-    option = 'trace'
-    params = get_parameters()
-    if option in params:
-        cleanup_parameters(option)
-        return params[option][0]
-    return None
-
-
 def cleanup_parameters(names):
     """
     Cleanup sys.argv from certain parameters to that program behavior remain
@@ -258,11 +266,14 @@ def init():
     """
     global filename_caller, filename_trace
     filename_caller = sys.argv[0]
-    filename_trace  = get_tracefile()
+    filename_trace  = get_parameters('trace')
+    if filename_trace: # Must be done before the test of task type
+        cleanup_parameters('trace')
 
     tasktype, taskname = get_task()
-    if not tasktype: return
+    if not tasktype: return # This is the main program
 
+    
     method = find_method(filename_caller, taskname)
     if method:
         tasks = {option_mapper:  mapper_wrapper,
@@ -293,20 +304,19 @@ def run_program(commandline, options=None):
         String.
     """
     if options == None: options = {}
-    #print 'command:', commandline % options
     child = os.popen(commandline % options)
     return child.read()
 
 
-def dfs_read(files, first=None, last=None):
+def dfs_read(filenames, first=None, last=None):
     """
-    Read the content of files on the DFS. Multiple files can be specified,
-    and it is possible to read only n lines at the beginning or at the end
-    of the file. 'first' and 'last' being exclusive parameters, if both of
-    them are used then only 'first' is used.
+    Read the content of files on the DFS. Multiple file names can be
+    specified, and it is possible to read only n lines at the beginning or
+    at the end of the file. 'first' and 'last' being exclusive parameters,
+    if both of them are used then only 'first' is used.
 
     :Parameters:
-        files : string or list of strings
+        filenames : string or list of strings
             Files to read from on the DFS.
         first : int
             Number of lines to read at the beginning of the file
@@ -319,13 +329,13 @@ def dfs_read(files, first=None, last=None):
     :ReturnType:
         List of strings.
     """
-    if not isinstance(files, list): files = [files]
+    if not isinstance(filenames, list): filenames = [filenames]
     options = {'mapreduce': mapreduce_program,
-               'files':     ' '.join(files) }
+               'filenames': ' '.join(filenames) }
     if first:   truncate = ' | head -n %s' % first
     elif last:  truncate = ' | tail -n %s' % last
     else:       truncate = ''
-    commandline = '%(mapreduce)s dfs -cat %(files)s' + truncate
+    commandline = '%(mapreduce)s dfs -cat %(filenames)s' + truncate
     return run_program(commandline, options)
 
 
@@ -434,11 +444,11 @@ def run(mapper,
             the parameters. If a list of string is given as a value, then all
             these values will be passed to the mapper and reducer tasks.
         inputformat : string
-            Input format of the input files. Can be either 'text' or 'auto',
-            default is 'auto'.
+            Format of the input files. Can be either 'text' or 'auto', default
+            is 'auto'.
         outputformat : string
-            Output format of the output file. Can be either 'text' or 'auto',
-            default is 'auto'.
+            Format of the output file. Can be either 'text' or 'auto', default
+            is 'auto'.
 
     :Return:
         Return of the Hadoop task called.
