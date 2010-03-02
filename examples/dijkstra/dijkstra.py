@@ -58,7 +58,7 @@ def frontier_mapper(key, value):
 
 
 def frontier_reducer(node, values):
-    """Keep the minimum to follow Dijsktra's algorithm"""
+    """Keep the minimum to follow Dijkstra's algorithm"""
     try:
         distances = [v for v in values]
         d_previous = min([int(d.split()[0]) for d in distances])
@@ -106,7 +106,7 @@ def display_usage():
     print '  source_node: id of the source node'
     print '  output: basename of the output files on the DFS'
     print '  iteration_max: maximum number of iterations (default=infinite)'
-    print '  iteration_start: iteration to start from, useful to restart a stopped task (default=0)'
+    print '  iteration_start: iteration to start from, useful to restart a stopped task (default=1)'
  
 
 if __name__ == "__main__":
@@ -129,9 +129,10 @@ if __name__ == "__main__":
     options  = {'graph': filename_graph, 'source': source_node}
 
     # Create the initial frontier with the tuple (source, 0)
-    frontier_current = frontier % (iteration_start - 1)
+    frontier_current = frontier % iteration_start
     if iteration_start == 1:
         prince.dfs_write(frontier_current + part, (source_node, '%d %d' % (sys.maxint, 0)))
+        iteration_start += 1
 
     stop = False
     iteration = iteration_start

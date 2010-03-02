@@ -1,6 +1,16 @@
 #!/usr/bin/env python
 """
 Distributed PageRank algorithm.
+
+Compute PageRank values for a set of nodes in a graph. The algorithm uses
+a uniform probability distribution to set the initial values: each value is
+equal to 1 / N, where N is the number of nodes in the whole graph.
+Dandlings nodes (ie: nodes that do not have any out-links to any page, and
+therefore have an empty adjacenty list) are connected to the whole graph in
+order to take advantage of their PageRank values.
+The computation of the PageRank values is stopped when change in values
+between two iterations drops under a threshold. Error is calculated using
+the quadratic norm.
 """
 __docformat__ = "restructuredtext en"
 
@@ -53,7 +63,7 @@ def pagerank_mapper(key, value):
 
 
 def pagerank_reducer(node, values):
-    """Keep the minimum to follow Dijsktra's algorithm"""
+    """Compute the new PageRank for the node"""
     try:
         # sort because we want the 'infos' value at the end of the list
         values = sorted([v for v in values]) # as values is a generator
@@ -63,12 +73,10 @@ def pagerank_reducer(node, values):
 
         pr_previous = float(infos[2])
         nodes_adjacent = [int(n) for n in infos[3:]]
-
         pageranks = [float(v) for v in values[:-1]]
-        if len(pageranks) == 0:
-            pr_new = (1.0 - damping)
-        else:
-            pr_new = (1.0 - damping) / len(pageranks) + damping * sum(pageranks)
+
+        nb_nodes = float(params['nbnodes'][0])
+        pr_new = (1.0 - damping) / nb_nodes + damping * sum(pageranks)
         yield (node, make_value(pr_previous, pr_new, nodes_adjacent))
     except ValueError:
         pass
@@ -76,22 +84,18 @@ def pagerank_reducer(node, values):
 
 def term_mapper(key, value):
     """Check if an update has been made during the the current iteration"""
-    import math
     (node, pr_previous, pr_current, nodes_adjacent) = node_info(value)
     if node != None:
+        yield 0, (pr_previous - pr_current)
+
+
+def term_reducer(key, pagerank_changes):
+    """Check whether the values are precise enough using the quadratic norm"""
+    try:
         params = prince.get_parameters()
         precision = float(params['precision'][0])
-        pr_min = min(pr_previous, pr_current)
-        pr_max = max(pr_previous, pr_current)
-        changed = 0 if math.fabs((pr_max - pr_min) / pr_max) < precision else 1
-        yield 0, changed # important: must reduce to the same key
-
-
-def term_reducer(key, changed):
-    """Check whether any of the PageRank values have changed"""
-    try:
-        if any(int(c) for c in changed):
-            return 0, 0 # must perform another iteration
+        if sum([float(p) ** 2 for p in pagerank_changes]) > precision ** 2:
+            return 0, 0 # let's do another iteration
     except ValueError:
         pass # the algorithm is stopped in case of error
     return 1, 1
@@ -110,57 +114,69 @@ def read_graph(filename):
     return graph
 
 
-def make_value(pr_previous, pr_current, nodes):
-    adjacency_list = ' '.join([str(n) for n in nodes])
-    return '%f %f %s' % (pr_previous, pr_current, adjacency_list)
-
-
-def initial_pagerank(filename_graph, pr_init):
-    params = prince.get_parameters()
-    graph = read_graph(filename_graph)
+def handle_dandling_nodes(graph):
+    """Connect dandlings nodes to the whole graph"""
+    nodes = set([n for n in graph.keys()])
     for node, nodes_adjacent in graph.items():
-        yield (node, make_value(pr_init, pr_init, nodes_adjacent))
+        if not nodes_adjacent:
+            nodes_all_others = list(nodes - set([node]))
+            nodes_adjacent.extend(nodes_all_others)
+
+
+def make_value(pr_previous, pr_current, nodes):
+    """Build a value to be used in an item (key, value)"""
+    adjacency_list = ' '.join([str(n) for n in nodes])
+    return '%.40f %.40f %s' % (pr_previous, pr_current, adjacency_list)
+
+
+def initial_pagerank(graph, pr_init):
+    """Set the initial PageRank values"""
+    return [(node, make_value(pr_init, pr_init, nodes_adjacent)) for node, nodes_adjacent in graph.items()]
 
 
 def display_usage():
-    print 'usage: ./%s graph output init damping precision [iteration_max] [iteration_start]' % sys.argv[0]
+    print 'usage: ./%s graph output damping precision [iteration_max] [iteration_start]' % sys.argv[0]
     print '  graph: graph file on local hard drive: each line begin with the id of a node, and it'
     print '         is continued by its adjacenty list, ie: the ids of the nodes it points to'
     print '  output: basename of the output files on the DFS'
-    print '  init: initial value for the PageRank values (PageRank\'s paper suggests 1.0)'
-    print '  damping: value of the damping factor (in [0, 1), PageRank\'s paper suggests .85)'
-    print '  precision: precision value below which a PageRank value is considered stable,'
-    print '             for instance .05 means no more than 5% difference between two iterations'
+    print '  damping: value of the damping factor within (0,1), the PageRank paper suggesting .85'
+    print '  precision: precision value below which a PageRank value is considered stable'
+    print '             for instance .01 means no more than 1% difference between two iterations'
+    print '             the quadratic norm is used for computing change'
     print '  iteration_max: maximum number of iterations (default=infinite)'
-    print '  iteration_start: iteration to start from, useful to restart a stopped task (default=0)'
+    print '  iteration_start: iteration to start from, useful to restart a stopped task (default=1)'
  
 
 if __name__ == "__main__":
     prince.init()
 
-    if len(sys.argv) < 6:
+    if len(sys.argv) < 5:
         display_usage()
         sys.exit(0)
 
     filename_graph  = sys.argv[1]
     output          = sys.argv[2]
-    pr_init         = float(sys.argv[3])
-    damping         = float(sys.argv[4])
-    precision       = float(sys.argv[5])
-    iteration_max   = int(sys.argv[6]) if len(sys.argv) >= 7 else sys.maxint
-    iteration_start = int(sys.argv[7]) if len(sys.argv) >= 8 else 1
+    damping         = float(sys.argv[3])
+    precision       = float(sys.argv[4])
+    iteration_max   = int(sys.argv[5]) if len(sys.argv) >= 6 else sys.maxint
+    iteration_start = int(sys.argv[6]) if len(sys.argv) >= 7 else 1
+
+    graph    = read_graph(filename_graph)
+    pr_init  = 1.0 / len(graph) # initial values: uniform probability distribution
+    handle_dandling_nodes(graph)
 
     pagerank = output + '_pagerank%04d'
     term     = output + '_term%04d'
     suffix   = '/part*'
     part     = '/part-00000'
-    options  = {'damping': damping, 'precision': precision}
+    options  = {'damping': damping, 'precision': precision, 'nbnodes': len(graph)}
 
     # Create the initial values
-    pagerank_current = pagerank % (iteration_start - 1)
+    pagerank_current = pagerank % iteration_start
     if iteration_start == 1:
-        pagerank_values  = [p for p in initial_pagerank(filename_graph, pr_init)]
+        pagerank_values = [(n, make_value(pr_init, pr_init, n_adjacent)) for n, n_adjacent in graph.items()]
         prince.dfs_write(pagerank_current + part, pagerank_values)
+        iteration_start += 1
 
     stop = False
     iteration = iteration_start
@@ -173,12 +189,10 @@ if __name__ == "__main__":
         # Compute the new PageRank values
         prince.run(pagerank_mapper, pagerank_reducer, pagerank_previous + suffix, pagerank_current,
                    [], options, 'text', 'text')
-        print prince.dfs_read(pagerank_current + suffix)
 
         # Termination: check if all PageRank values are stable
         prince.run(term_mapper, term_reducer, pagerank_current + suffix, term_current,
                    [], options, 'text', 'text')
-        print prince.dfs_read(term_current + suffix)
         term_value = prince.dfs_read(term_current + suffix)
         stop = int(term_value.split()[1])
 

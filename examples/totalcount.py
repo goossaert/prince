@@ -3,8 +3,8 @@
 Count all the items in a data set.
 
 The one iteration solution that consists in reducing all items to the same key
-requires a heavy work load on only one reducer. This solution balances the work
-load amongst possibly multiple reducers, however it requires two iterations.
+requires a heavy work load from only one reducer. This solution balances the
+work load amongst possibly multiple reducers, however it requires two iterations.
 """
 __docformat__ = "restructuredtext en"
 
@@ -34,13 +34,16 @@ import prince
 
 def count_mapper(key, value):
     """
-    Distribute the values equally over keys. By having each mapper using
-    each key only once, all keys are guaranteed to be used at most m values,
-    where m is the number of mappers used for the computation.
+    Distribute the values over keys, equality enough to average computational
+    complexity for the reducers. By using a modulo, we are sure to balance the
+    number of values for each key in the reducers. Therefore, this method
+    avoids the case where a single reducer faces the whole data set.
     """
+    nb_buckets = 100 # this value is correct for small- and medium-sized
+                     # data sets, but should be adjusted to each case
     key = int(key)
     for index, item in enumerate(value.split()):
-        yield key + index, 1
+        yield (key + index) % nb_buckets, 1
 
 
 def count_reducer(key, values):
