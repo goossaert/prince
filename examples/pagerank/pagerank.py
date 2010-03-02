@@ -81,7 +81,7 @@ def pagerank_reducer(node, values):
 
 
 def term_mapper(key, value):
-    """Check if an update has been made during the the current iteration"""
+    """Compute the difference between previous and current PageRank values"""
     (node, pr_previous, pr_current, nodes_adjacent) = node_info(value)
     if node != None:
         yield 0, (pr_previous - pr_current)
