@@ -132,7 +132,7 @@ def initial_pagerank(graph, pr_init):
 
 
 def display_usage():
-    print 'usage: ./%s graph output damping precision [iteration_max] [iteration_start]' % sys.argv[0]
+    print 'usage: %s graph output damping precision [iteration_max] [iteration_start]' % sys.argv[0]
     print '  graph: graph file on local hard drive: each line begin with the id of a node, and it'
     print '         is continued by its adjacenty list, ie: the ids of the nodes it points to'
     print '  output: basename of the output files on the DFS'
@@ -172,7 +172,7 @@ if __name__ == "__main__":
     pagerank_current = pagerank % iteration_start
     if iteration_start == 1:
         pagerank_values = [(n, make_value(pr_init, pr_init, n_adjacent)) for n, n_adjacent in graph.items()]
-        prince.dfs_write(pagerank_current + part, pagerank_values)
+        prince.dfs.write(pagerank_current + part, pagerank_values)
         iteration_start += 1
 
     stop = False
@@ -190,7 +190,7 @@ if __name__ == "__main__":
         # Termination: check if all PageRank values are stable
         prince.run(term_mapper, term_reducer, pagerank_current + suffix, term_current,
                    [], options, 'text', 'text')
-        term_value = prince.dfs_read(term_current + suffix)
+        term_value = prince.dfs.read(term_current + suffix)
         stop = int(term_value.split()[1])
 
         # Get ready for the next iteration

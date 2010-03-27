@@ -1,6 +1,5 @@
-#!/usr/bin/env python
 """
-Example of import of mapper and reducer methods.
+Prince configuration module
 """
 __docformat__ = "restructuredtext en"
 
@@ -24,34 +23,21 @@ __docformat__ = "restructuredtext en"
 ## You should have received a copy of the GNU General Public License
 ## along with Prince.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys
-import prince
+import os
 
-# Methods from wordcount are now in the local name space
-from wordcount import * 
+inputformats = {'text': 'org.apache.hadoop.mapred.TextInputFormat',
+                'auto': 'org.apache.hadoop.streaming.AutoInputFormat'}
 
+outputformats = {'text': 'org.apache.hadoop.mapred.TextOutputFormat',
+                 'auto': 'org.apache.hadoop.mapred.SequenceFileOutputFormat'}
 
-def display_usage():
-    print 'usage: %s input output' % sys.argv[0]
-    print '  input: input file on the DFS'
-    print '  output: output file on the DFS'
+mapreduce_path      = os.environ.get('HADOOP_HOME') + '/'
+mapreduce_program   = mapreduce_path + 'bin/hadoop'
 
+mapreduce_dirstreaming = 'contrib/streaming/'
+mapreduce_streaming = mapreduce_dirstreaming + os.listdir(mapreduce_path + mapreduce_dirstreaming)[0]
 
-if __name__ == "__main__":
-    # Always call prince.init() at the beginning of the program
-    prince.init()
+option_mapper  = 'pmapper'
+option_reducer = 'preducer'
+separator = '\t'
 
-    if len(sys.argv) != 3:
-        display_usage()
-        sys.exit(0)
-
-    input  = sys.argv[1]
-    output = sys.argv[2]
-
-    # Run the task with the mapper and reducer methods from the wordcount.py file
-    # Note that the file wordcount.py is added to the 'files' argument
-    prince.run(wc_mapper, wc_reducer, input, output, inputformat='text', outputformat='text', files='wordcount.py')
-
-    # Read the output file and print it 
-    file = prince.dfs.read(output + '/part*')
-    print file

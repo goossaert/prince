@@ -130,7 +130,7 @@ def split_reducer(key, values):
 
 
 def display_usage():
-    print 'usage: ./%s input output' % sys.argv[0]
+    print 'usage: %s input output' % sys.argv[0]
     print '  input: input file on the DFS'
     print '  output: output file on the DFS'
 
@@ -160,7 +160,7 @@ if __name__ == "__main__":
         prince.run(merge_mapper, merge_reducer, previous + suffix, current, inputformat='text', outputformat='text')
  
         # Check if sort is done
-        state = prince.dfs_read(current + suffix, last=1) 
+        state = prince.dfs.read(current + suffix, last=1) 
         if int(state.split()[0]) == 0:
             stop = True
         iteration += 1

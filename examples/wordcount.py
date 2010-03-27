@@ -61,5 +61,5 @@ if __name__ == "__main__":
     prince.run(wc_mapper, wc_reducer, input, output, inputformat='text', outputformat='text')
 
     # Read the output file and print it 
-    file = prince.dfs_read(output + '/part*')
+    file = prince.dfs.read(output + '/part*')
     print file

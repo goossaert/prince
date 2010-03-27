@@ -99,7 +99,7 @@ def read_graph(filename):
 
 
 def display_usage():
-    print 'usage: ./%s graph source_node output [iteration_max] [iteration_start]' % sys.argv[0]
+    print 'usage: %s graph source_node output [iteration_max] [iteration_start]' % sys.argv[0]
     print '  graph: graph file on local hard drive: each line begin with the id of a node, and it'
     print '         is continued by its adjacenty list, ie: the ids of the nodes it points to'
     print '  source_node: id of the source node'
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     # Create the initial frontier with the tuple (source, 0)
     frontier_current = frontier % iteration_start
     if iteration_start == 1:
-        prince.dfs_write(frontier_current + part, (source_node, '%d %d' % (sys.maxint, 0)))
+        prince.dfs.write(frontier_current + part, (source_node, '%d %d' % (sys.maxint, 0)))
         iteration_start += 1
 
     stop = False
@@ -144,13 +144,13 @@ if __name__ == "__main__":
         # Compute the new frontier
         prince.run(frontier_mapper, frontier_reducer, frontier_previous + suffix, frontier_current,
                    filename_graph, options, 'text', 'text')
-        print prince.dfs_read(frontier_current + suffix)
+        print prince.dfs.read(frontier_current + suffix)
 
         # Termination: check if all distances are stable
         prince.run(term_mapper, term_reducer, frontier_current + suffix, term_current,
                    filename_graph, options, 'text', 'text')
-        print prince.dfs_read(term_current + suffix)
-        term_value = prince.dfs_read(term_current + suffix)
+        print prince.dfs.read(term_current + suffix)
+        term_value = prince.dfs.read(term_current + suffix)
         stop = int(term_value.split()[1])
 
         # Get ready for the next iteration

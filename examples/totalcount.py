@@ -68,12 +68,12 @@ def count_items(input, output):
     prince.run(sum_mapper, count_reducer, inter + '/part*', output, inputformat='text', outputformat='text', files=__file__)
 
     # Read the output file and print it 
-    file = prince.dfs_read(output + '/part*', first=1)
+    file = prince.dfs.read(output + '/part*', first=1)
     return int(file.split()[1])
 
 
 def display_usage():
-    print 'usage: ./%s input output' % sys.argv[0]
+    print 'usage: %s input output' % sys.argv[0]
     print '  input: input file on the DFS'
     print '  output: output file on the DFS'
 
